@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GapFinder AI - Python Edition</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Python study assistant</p>
+          <h1>GapFinder AI</h1>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel input-panel">
+          <h2>Study material</h2>
+          <label for="sourceText">Paste your notes or syllabus text</label>
+          <textarea id="sourceText" rows="15" placeholder="Paste your notes here..."></textarea>
+
+          <div class="field-row">
+            <div class="field-group">
+              <label for="topic">Topic</label>
+              <input id="topic" type="text" value="photosynthesis" />
+            </div>
+            <div class="field-group">
+              <label for="question">Question</label>
+              <input id="question" type="text" placeholder="Ask a question about the topic" />
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="quizButton" class="primary">Generate quiz</button>
+            <button id="askButton">Ask question</button>
+          </div>
+        </section>
+
+        <section class="panel output-panel">
+          <h2>Results</h2>
+          <div id="results" class="results">
+            <p class="empty-state">Add your study notes and choose a mode to begin.</p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const results = document.getElementById('results');
+
+      function showError(message) {
+        results.innerHTML = `<div class="status error">${message}</div>`;
+      }
+
+      function renderQuestionCard(question, index) {
+        const options = question.options
+          .map((option, optionIndex) => {
+            const isCorrect = optionIndex === question.answerIndex;
+            return `
+              <li class="option ${isCorrect ? 'correct' : ''}">
+                <span>${String.fromCharCode(65 + optionIndex)}.</span>
+                <span>${option}</span>
+              </li>
+            `;
+          })
+          .join('');
+
+        return `
+          <article class="card">
+            <h3>Question ${index + 1}</h3>
+            <p class="question-text">${question.question}</p>
+            <ul class="options">${options}</ul>
+            <div class="expander">
+              <strong>Correct answer:</strong> ${question.options[question.answerIndex]}
+            </div>
+            <p><strong>Explanation:</strong> ${question.explanation}</p>
+            <p class="citation"><strong>Citation:</strong> ${question.citation.source}<br>${question.citation.excerpt}</p>
+          </article>
+        `;
+      }
+
+      function renderExplain(answer) {
+        results.innerHTML = `
+          <article class="card answer-card">
+            <h3>Answer</h3>
+            <p>${answer.answer}</p>
+            <p class="citation"><strong>Citation:</strong> ${answer.citation.source}<br>${answer.citation.excerpt}</p>
+          </article>
+        `;
+      }
+
+      async function callStudy(payload) {
+        const response = await fetch('/api/study', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          const message = data.detail || data.error || 'The request failed.';
+          throw new Error(message);
+        }
+
+        return data;
+      }
+
+      document.getElementById('quizButton').addEventListener('click', async () => {
+        try {
+          const topic = document.getElementById('topic').value.trim();
+          const text = document.getElementById('sourceText').value.trim();
+          if (!topic || !text) {
+            showError('Add both a topic and study notes before generating a quiz.');
+            return;
+          }
+
+          results.innerHTML = '<p class="empty-state">Generating questions...</p>';
+          const data = await callStudy({
+            action: 'quiz',
+            topic,
+            sources: [{ id: 'source-1', name: 'study-notes.txt', text }],
+          });
+
+          results.innerHTML = data.questions
+            .map((question, index) => renderQuestionCard(question, index))
+            .join('');
+        } catch (error) {
+          showError(error.message);
+        }
+      });
+
+      document.getElementById('askButton').addEventListener('click', async () => {
+        try {
+          const topic = document.getElementById('topic').value.trim();
+          const question = document.getElementById('question').value.trim();
+          const text = document.getElementById('sourceText').value.trim();
+          if (!topic || !question || !text) {
+            showError('Add a topic, a question, and study notes before asking.');
+            return;
+          }
+
+          results.innerHTML = '<p class="empty-state">Looking for the best answer...</p>';
+          const data = await callStudy({
+            action: 'explain',
+            topic,
+            question,
+            sources: [{ id: 'source-1', name: 'study-notes.txt', text }],
+          });
+
+          renderExplain(data);
+        } catch (error) {
+          showError(error.message);
+        }
+      });
+    </script>
+  </body>
+</html>
